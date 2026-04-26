@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Halogram Pro · LSB + QR Decoder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Barlow+Condensed:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"></script>
+<style>
+/* (same modern dark/light theme as before – omitted for brevity, but kept identical) */
+:root { --bg: #0b0d10; --bg2: #0e1115; --surface: #13171e; --surface2: #1a1f28; --surface3: #212733; --border: #252c3a; --border2: #2e3848; --accent: #00e5ff; --accent-dim: rgba(0,229,255,0.12); --accent2: #ff6b35; --green: #00ff88; --green-dim: rgba(0,255,136,0.1); --yellow: #ffd166; --red: #ff4757; --red-dim: rgba(255,71,87,0.1); --text: #dde4f0; --text2: #7b8ba8; --text3: #3d4a5c; --mono: 'IBM Plex Mono', monospace; --display: 'Barlow Condensed', sans-serif; --r: 8px; --r2: 14px; --r3: 20px; --shadow: 0 2px 24px rgba(0,0,0,0.6); --glow: 0 0 24px rgba(0,229,255,0.15); }
+[data-theme="light"] { --bg: #edf0f5; --bg2: #e4e8f0; --surface: #f8f9fc; --surface2: #eef1f7; --surface3: #e6eaf2; --border: #d0d8e8; --border2: #bcc6d8; --accent: #0077cc; --accent-dim: rgba(0,119,204,0.1); --accent2: #e05a1a; --green: #007a3d; --green-dim: rgba(0,122,61,0.08); --yellow: #b07800; --red: #cc2030; --red-dim: rgba(204,32,48,0.08); --text: #1a2035; --text2: #4a5878; --text3: #9aaac0; --shadow: 0 2px 16px rgba(0,0,0,0.08); --glow: 0 0 20px rgba(0,119,204,0.1); }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{font-family:var(--mono);background:var(--bg);color:var(--text);min-height:100svh;font-size:13px;line-height:1.6;overflow-x:hidden;transition:background 0.25s,color 0.25s;}
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.04) 2px,rgba(0,0,0,0.04) 4px);pointer-events:none;z-index:999;}
+[data-theme="light"] body::after{opacity:0;}
+.shell{max-width:1040px;margin:0 auto;padding:0 16px 60px;}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:20px 0 28px;gap:12px;flex-wrap:wrap;}
+.wordmark{display:flex;align-items:baseline;gap:10px;}
+.wordmark-name{font-family:var(--display);font-size:28px;font-weight:700;letter-spacing:0.04em;color:var(--text);text-transform:uppercase;}
+.wordmark-tag{font-size:10px;color:var(--accent);letter-spacing:0.12em;text-transform:uppercase;border:1px solid var(--accent);padding:1px 7px;border-radius:3px;font-weight:500;}
+.topbar-right{display:flex;align-items:center;gap:8px;}
+.theme-toggle{background:var(--surface2);border:1px solid var(--border2);color:var(--text2);font-family:var(--mono);font-size:11px;padding:5px 12px;border-radius:4px;cursor:pointer;transition:all 0.15s;letter-spacing:0.05em;}
+.theme-toggle:hover{border-color:var(--accent);color:var(--accent);}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:20px;}
+.tab-btn{font-family:var(--display);font-size:14px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;background:none;border:none;color:var(--text2);padding:8px 20px 10px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.15s;white-space:nowrap;}
+.tab-btn:hover{color:var(--text);}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:20px;margin-bottom:12px;box-shadow:var(--shadow);transition:background 0.25s,border-color 0.15s;}
+.panel:hover{border-color:var(--border2);}
+.panel-title{font-family:var(--display);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.16em;color:var(--text2);margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+.panel-title::before{content:'';display:block;width:3px;height:12px;background:var(--accent);border-radius:2px;flex-shrink:0;}
+.panel-title .badge{margin-left:auto;font-size:10px;padding:2px 8px;background:var(--accent-dim);color:var(--accent);border-radius:3px;letter-spacing:0.08em;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+@media (max-width:660px){.grid2{grid-template-columns:1fr;}.tab-btn{padding:8px 12px;font-size:12px;}.wordmark-name{font-size:22px;}}
+.field-label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text2);margin-bottom:5px;margin-top:14px;font-weight:500;}
+.field-label:first-child{margin-top:0;}
+input[type="file"],input[type="text"],textarea,select{display:block;width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:8px 12px;color:var(--text);font-family:var(--mono);font-size:12px;transition:border-color 0.15s;appearance:none;}
+input[type="file"]:hover,input[type="text"]:focus,textarea:focus,select:focus{outline:none;border-color:var(--accent);}
+textarea{resize:vertical;min-height:88px;}
+input[type="file"]{cursor:pointer;}
+.btn-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;}
+.btn{display:inline-flex;align-items:center;gap:5px;font-family:var(--display);font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;background:var(--surface3);border:1px solid var(--border2);color:var(--text2);padding:7px 14px;border-radius:var(--r);cursor:pointer;transition:all 0.15s;white-space:nowrap;}
+.btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent);background:var(--accent-dim);}
+.btn:disabled{opacity:0.3;cursor:not-allowed;}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#000;font-weight:700;box-shadow:0 0 16px rgba(0,229,255,0.3);}
+.btn-primary:hover:not(:disabled){background:var(--accent);opacity:0.85;color:#000;transform:translateY(-1px);box-shadow:0 2px 20px rgba(0,229,255,0.5);}
+.btn-green{background:var(--green);border-color:var(--green);color:#000;font-weight:700;}
+.btn-green:hover:not(:disabled){opacity:0.85;transform:translateY(-1px);}
+[data-theme="light"] .btn-primary,[data-theme="light"] .btn-green{color:#fff;}
+.status{display:flex;align-items:flex-start;gap:6px;margin-top:10px;padding:8px 12px;border-radius:var(--r);font-size:11px;border:1px solid var(--border);color:var(--text2);background:var(--surface2);min-height:34px;word-break:break-word;line-height:1.5;transition:all 0.2s;}
+.status.ok{border-color:rgba(0,255,136,0.3);color:var(--green);background:var(--green-dim);}
+.status.err{border-color:rgba(255,71,87,0.3);color:var(--red);background:var(--red-dim);}
+.status.warn{border-color:rgba(255,209,102,0.3);color:var(--yellow);background:rgba(255,209,102,0.07);}
+.progress-track{height:3px;background:var(--surface3);border-radius:2px;margin-top:8px;overflow:hidden;display:none;}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--green));border-radius:2px;width:0;transition:width 0.3s ease;}
+.preview-wrap{position:relative;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.preview-title{position:absolute;top:0;left:0;right:0;padding:5px 10px;font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text3);background:var(--surface);border-bottom:1px solid var(--border);z-index:2;font-weight:500;}
+.preview-inner{padding:34px 10px 10px;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:120px;text-align:center;color:var(--text3);font-size:11px;}
+.preview-inner img{max-width:100%;max-height:240px;object-fit:contain;border-radius:4px;display:block;}
+.preview-inner canvas{max-width:100%;border-radius:4px;}
+.preview-inner embed,.preview-inner iframe{width:100%;height:380px;border:none;display:block;}
+.preview-inner audio,.preview-inner video{width:100%;display:block;border-radius:4px;}
+.preview-inner pre{text-align:left;white-space:pre-wrap;word-break:break-word;font-size:11px;color:var(--text);max-height:260px;overflow:auto;width:100%;padding:4px;}
+.preview-inner .file-placeholder{display:flex;flex-direction:column;align-items:center;gap:6px;}
+.preview-inner .file-placeholder .icon{font-size:36px;}
+.preview-inner .file-placeholder .fname{font-size:11px;color:var(--text2);word-break:break-all;}
+.preview-inner .file-placeholder .fsize{font-size:10px;color:var(--text3);}
+.chunk-grid{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
+.chunk-pill{font-size:10px;padding:3px 9px;border-radius:4px;border:1px solid var(--border);color:var(--text3);background:var(--surface2);font-weight:500;letter-spacing:0.04em;transition:all 0.2s;}
+.chunk-pill.done{border-color:rgba(0,255,136,0.4);color:var(--green);background:var(--green-dim);}
+.chunk-pill.error{border-color:rgba(255,71,87,0.4);color:var(--red);background:var(--red-dim);}
+.chunk-pill.load{border-color:rgba(0,229,255,0.4);color:var(--accent);background:var(--accent-dim);}
+.action-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+.action-pill{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:4px;border:1px solid var(--border2);background:var(--surface3);color:var(--text2);cursor:pointer;transition:all 0.15s;text-decoration:none;}
+.action-pill:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);}
+.radio-group{display:flex;gap:16px;margin-top:8px;margin-bottom:4px;}
+.radio-group label{display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer;}
+#liveVideo{width:100%;display:block;border-radius:var(--r);background:#000;min-height:160px;}
+footer{text-align:center;font-size:10px;color:var(--text3);letter-spacing:0.08em;padding-top:20px;border-top:1px solid var(--border);margin-top:40px;}
+footer span{color:var(--accent);}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+.panel{animation:fadeIn 0.2s ease;}
+.btn-primary.working{animation:pulse 1.2s infinite;}
+@keyframes pulse{0%,100%{box-shadow:0 0 16px rgba(0,229,255,0.3);}50%{box-shadow:0 0 32px rgba(0,229,255,0.7);}}
+</style>
+</head>
+<body>
+<div class="shell">
+<div class="topbar">
+  <div class="wordmark"><span class="wordmark-name">Halogram Pro</span><span class="wordmark-tag">LSB+QR</span></div>
+  <div class="topbar-right"><button class="theme-toggle" id="themeBtn">☀ LIGHT</button></div>
+</div>
+<div class="tabs">
+  <button class="tab-btn active" data-tab="encode">▲ Encode</button>
+  <button class="tab-btn" data-tab="decode">▼ Decode</button>
+  <button class="tab-btn" data-tab="camera">◉ Camera</button>
+  <button class="tab-btn" data-tab="qr">◈ QR Bonus</button>
+</div>
+
+<!-- ENCODE TAB (unchanged) -->
+<div class="tab-panel active" id="tab-encode">
+  <div class="grid2">
+    <div>
+      <div class="panel"><div class="panel-title">Carrier Image</div><label class="field-label">PNG / JPEG / WebP image</label><input type="file" id="carrierInput" accept="image/png,image/jpeg,image/webp"><div class="status" id="carrierStatus">No image loaded</div><div class="cap-meter" id="capMeter" style="display:none"><span id="capText"></span><div class="cap-bar"><div class="cap-fill" id="capFill"></div></div></div></div>
+      <div class="panel"><div class="panel-title">Secret Payload</div>
+        <div class="radio-group"><label><input type="radio" name="payloadType" value="file" checked> 📄 Hide a file</label><label><input type="radio" name="payloadType" value="text"> ✏️ Hide text</label></div>
+        <div id="filePayloadArea"><label class="field-label">Choose any file (PDF, DOCX, etc.)</label><input type="file" id="secretFileInput"></div>
+        <div id="textPayloadArea" style="display:none"><label class="field-label">Paste text / links / phone numbers</label><textarea id="secretTextInput" rows="4" placeholder="Enter any text up to the image capacity…"></textarea></div>
+        <div class="status" id="payloadStatus">No payload selected</div>
+      </div>
+      <div class="panel"><div class="panel-title">Encode & Export</div><div class="btn-row"><button class="btn btn-primary" id="encodeBtn">⚙ Encode Now</button><button class="btn" id="dlSingleBtn" disabled>⬇ Save PNG</button><button class="btn" id="dlZipBtn" disabled style="display:none">📦 Download ZIP</button></div><div class="status" id="encodeStatus">Load a carrier and payload to begin</div><div class="progress-track" id="encodeProgress"><div class="progress-fill" id="encodeFill"></div></div></div>
+    </div>
+    <div>
+      <div class="panel"><div class="panel-title">Carrier Preview</div><div class="preview-wrap"><div class="preview-title">Original image</div><div class="preview-inner" id="carrierPreview"><span>Upload a carrier image →</span></div></div></div>
+      <div class="panel"><div class="panel-title">Encoded Output Preview</div><div class="preview-wrap"><div class="preview-title">First chunk (after encoding)</div><div class="preview-inner" id="chunkPreview"><span>Will appear after encoding</span></div></div><div class="chunk-grid" id="encodeChunkPills"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- DECODE TAB (now supports QR codes) -->
+<div class="tab-panel" id="tab-decode">
+  <div class="grid2">
+    <div>
+      <div class="panel"><div class="panel-title">Single Image Decode</div><label class="field-label">Select a PNG (Halogram or standard QR)</label><input type="file" id="singleDecodeInput" accept="image/png,image/jpeg,image/webp"><div class="btn-row"><button class="btn btn-primary" id="singleDecodeBtn">▼ Extract</button></div><div class="status" id="singleStatus">Ready</div></div>
+      <div class="panel"><div class="panel-title">Multi-Chunk Reconstruct (Halogram only)</div><label class="field-label">Select all halogram_*.png chunk files</label><input type="file" id="multiDecodeInput" accept="image/png" multiple><div class="btn-row"><button class="btn btn-primary" id="multiDecodeBtn">▼ Reconstruct</button></div><div class="status" id="multiStatus">Ready</div><div class="chunk-grid" id="chunkPills"></div><div class="progress-track" id="decodeProgress"><div class="progress-fill" id="decodeFill"></div></div></div>
+    </div>
+    <div>
+      <div class="panel" id="resultPanel" style="display:none"><div class="panel-title">Extracted Data <span class="badge" id="resultBadge"></span></div><div class="preview-wrap"><div class="preview-title" id="resultPreviewTitle">Preview</div><div class="preview-inner" id="resultPreview">No data yet</div></div><div class="action-row" id="resultActions"></div><div class="btn-row"><button class="btn btn-green" id="dlResultBtn">💾 Download file (QR text as .txt)</button></div></div>
+      <div class="panel" id="resultPlaceholder"><div class="panel-title">Result</div><div style="color:var(--text3); font-size:11px; padding:20px 0; text-align:center;">Decoded result will appear here (Halogram or QR)</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- CAMERA TAB (supports QR as well) -->
+<div class="tab-panel" id="tab-camera">
+  <div class="grid2">
+    <div><div class="panel"><div class="panel-title">Live Camera Scanner</div><video id="liveVideo" autoplay muted playsinline></video><div class="btn-row"><button class="btn btn-primary" id="startCamBtn">◉ Start Camera</button><button class="btn" id="captureBtn">◈ Capture & Decode</button></div><div class="status" id="camStatus">Camera not started</div><div class="status warn" style="margin-top:6px">📸 Tip: Good lighting, flat surface. Works for Halogram and QR codes.</div></div></div>
+    <div><div class="panel" id="camResultPanel" style="display:none"><div class="panel-title">Camera Decode Result</div><div class="preview-wrap"><div class="preview-title" id="camPreviewTitle">Preview</div><div class="preview-inner" id="camPreview">Waiting…</div></div><div class="action-row" id="camActions"></div><div class="btn-row"><button class="btn btn-green" id="camDlBtn" disabled>💾 Download as .txt</button></div></div><div class="panel" id="camPlaceholder"><div class="panel-title">Instructions</div><div style="color:var(--text2); font-size:11px; line-height:1.8;">1. Start camera<br>2. Point at any Halogram-encoded PNG or standard QR code<br>3. Click Capture & Decode<br>4. Preview extracted text or download as .txt</div></div></div>
+  </div>
+</div>
+
+<!-- QR BONUS TAB (unchanged) -->
+<div class="tab-panel" id="tab-qr">
+  <div class="panel"><div class="panel-title">Artistic QR Code Generator</div><p style="font-size:11px; color:var(--text2); margin-bottom:14px;">Generate scannable QR codes (Google Lens / standard apps) with artistic rendering modes.</p>
+  <div class="grid2"><div><label class="field-label">QR Content (URL, text…)</label><input type="text" id="qrContent" value="https://halogram.app" placeholder="https://…"><label class="field-label">Render Style</label><select id="qrStyle"><option value="classic">Classic</option><option value="invert">Inverted</option><option value="rounded">Rounded dots</option><option value="ghost">Ghost (light ink)</option></select><label class="field-label">Foreground color</label><input type="color" id="qrFg" value="#00e5ff" style="padding:3px; height:34px; width:100%;"><label class="field-label">Background color</label><input type="color" id="qrBg" value="#0b0d10" style="padding:3px; height:34px; width:100%;"><div class="btn-row"><button class="btn btn-primary" id="genQrBtn">◈ Generate QR</button><button class="btn" id="dlQrBtn" disabled>⬇ Save PNG</button></div><div class="status" id="qrStatus">Enter content and click Generate</div></div>
+  <div><div class="preview-wrap" style="min-height:220px;"><div class="preview-title">QR Preview</div><div class="preview-inner" id="qrPreview"><span>QR will appear here</span></div></div></div></div></div>
+</div>
+</div>
+<footer><span>HALOGRAM PRO+QR</span> · Decodes Halogram images AND standard QR codes · Camera works for both</footer>
+
+<script>
+'use strict';
+// ======================= THEME & PERSISTENCE =======================
+let _dark = localStorage.getItem('halogram_theme') !== 'light';
+function applyTheme() { document.documentElement.setAttribute('data-theme', _dark ? 'dark' : 'light'); document.getElementById('themeBtn').textContent = _dark ? '☀ LIGHT' : '🌙 DARK'; localStorage.setItem('halogram_theme', _dark ? 'dark' : 'light'); }
+applyTheme();
+document.getElementById('themeBtn').addEventListener('click', () => { _dark = !_dark; applyTheme(); });
+// Tabs
+document.querySelectorAll('.tab-btn').forEach(btn => { btn.addEventListener('click', () => { document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active')); btn.classList.add('active'); document.getElementById('tab-' + btn.dataset.tab).classList.add('active'); }); });
+
+// ======================= RADIO FOR FILE/TEXT (same) =======================
+const radioFile = document.querySelector('input[value="file"]');
+const radioText = document.querySelector('input[value="text"]');
+const fileArea = document.getElementById('filePayloadArea');
+const textArea = document.getElementById('textPayloadArea');
+function updatePayloadUI() { if (radioFile.checked) { fileArea.style.display = 'block'; textArea.style.display = 'none'; } else { fileArea.style.display = 'none'; textArea.style.display = 'block'; } }
+radioFile.addEventListener('change', updatePayloadUI);
+radioText.addEventListener('change', updatePayloadUI);
+updatePayloadUI();
+
+// ======================= UTILITIES =======================
+function setStatus(el, msg, type = '') { el.textContent = msg; el.className = 'status' + (type ? ' ' + type : ''); }
+function fmtBytes(n) { if (n < 1024) return n + ' B'; if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB'; return (n/1024/1024).toFixed(2) + ' MB'; }
+function triggerDL(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
+function sanitizeName(n) { return n.replace(/[^\w.\-]/g, '_').substring(0, 40); }
+
+// ======================= LSB ENGINE (unchanged) =======================
+function lsbEncode(imageData, payload) {
+  const w = imageData.width, h = imageData.height, pixels = w*h, data = new Uint8ClampedArray(imageData.data);
+  const maxPayload = Math.floor(pixels * 3 / 8) - 4;
+  if (payload.length > maxPayload) throw new Error(`Payload ${fmtBytes(payload.length)} exceeds capacity ${fmtBytes(maxPayload)}`);
+  const stream = new Uint8Array(4 + payload.length);
+  new DataView(stream.buffer).setUint32(0, payload.length, false);
+  stream.set(payload, 4);
+  let sByte = 0, sBit = 7;
+  for (let px = 0; px < pixels; px++) {
+    const base = px * 4;
+    for (let ch = 0; ch < 3; ch++) {
+      if (sByte >= stream.length) break;
+      const bit = (stream[sByte] >> sBit) & 1;
+      data[base + ch] = (data[base + ch] & 0xFE) | bit;
+      sBit--; if (sBit < 0) { sBit = 7; sByte++; }
+    }
+    if (sByte >= stream.length) break;
+  }
+  return new ImageData(data, w, h);
+}
+function lsbDecode(imageData) {
+  const w = imageData.width, h = imageData.height, pixels = w*h, data = imageData.data;
+  const maxPayload = Math.floor(pixels * 3 / 8) - 4;
+  let headerBits = [];
+  for (let px = 0; px < pixels && headerBits.length < 32; px++) {
+    const base = px * 4;
+    for (let ch = 0; ch < 3 && headerBits.length < 32; ch++) headerBits.push(data[base + ch] & 1);
+  }
+  let payLen = 0;
+  for (let i = 0; i < 32; i++) payLen = (payLen << 1) | headerBits[i];
+  payLen = payLen >>> 0;
+  if (payLen === 0 || payLen > maxPayload) throw new Error('No Halogram header');
+  const totalBytes = 4 + payLen;
+  const result = new Uint8Array(totalBytes);
+  let rByte = 0, rBit = 7, val = 0;
+  for (let px = 0; px < pixels && rByte < totalBytes; px++) {
+    const base = px * 4;
+    for (let ch = 0; ch < 3 && rByte < totalBytes; ch++) {
+      val = (val << 1) | (data[base + ch] & 1);
+      rBit--;
+      if (rBit < 0) { result[rByte++] = val & 0xFF; val = 0; rBit = 7; }
+    }
+  }
+  return result.slice(4, 4 + payLen);
+}
+async function fileToImageData(file) { return new Promise((res, rej) => { const img = new Image(); const url = URL.createObjectURL(file); img.onload = () => { URL.revokeObjectURL(url); const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0); res({ imageData: ctx.getImageData(0, 0, c.width, c.height), canvas: c, ctx, img }); }; img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('Failed to load image')); }; img.src = url; }); }
+async function encodeFileIntoCarrier(carrierFile, payloadBytes) { const { imageData, ctx, canvas } = await fileToImageData(carrierFile); const encoded = lsbEncode(imageData, payloadBytes); ctx.putImageData(encoded, 0, 0); return new Promise(res => canvas.toBlob(res, 'image/png')); }
+async function decodeHalogram(file) { const { imageData } = await fileToImageData(file); return lsbDecode(imageData); }
+function imageCapacity(img) { return Math.floor(img.naturalWidth * img.naturalHeight * 3 / 8) - 4; }
+
+// ======================= QR DECODER (using jsQR) =======================
+async function decodeQRCode(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const imageData = ctx.getImageData(0, 0, img.width, img.height);
+      const code = jsQR(imageData.data, img.width, img.height, { inversionAttempts: "dontInvert" });
+      if (code) resolve(code.data);
+      else reject(new Error('No QR code found in image'));
+    };
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = url;
+  });
+}
+
+// ======================= COMPRESSION WITH FALLBACK =======================
+let _compressionSupported = true;
+async function compress(bytes) {
+  if (!_compressionSupported) return bytes;
+  try {
+    if (typeof CompressionStream === 'undefined') throw new Error('no API');
+    const cs = new CompressionStream('gzip');
+    const writer = cs.writable.getWriter();
+    writer.write(bytes); writer.close();
+    return new Uint8Array(await new Response(cs.readable).arrayBuffer());
+  } catch(e) {
+    _compressionSupported = false;
+    return bytes;
+  }
+}
+async function decompress(bytes) {
+  if (!_compressionSupported) return bytes;
+  try {
+    if (typeof DecompressionStream === 'undefined') throw new Error('no API');
+    const ds = new DecompressionStream('gzip');
+    const writer = ds.writable.getWriter();
+    writer.write(bytes); writer.close();
+    return new Uint8Array(await new Response(ds.readable).arrayBuffer());
+  } catch(e) { return bytes; }
+}
+
+// ======================= MIME & PREVIEW (unchanged) =======================
+function detectMime(b) { if (b.length<4) return 'text/plain'; if(b[0]==0x25&&b[1]==0x50&&b[2]==0x44&&b[3]==0x46) return 'application/pdf'; if(b[0]==0x89&&b[1]==0x50&&b[2]==0x4E&&b[3]==0x47) return 'image/png'; if(b[0]==0xFF&&b[1]==0xD8) return 'image/jpeg'; if(b[0]==0x47&&b[1]==0x49&&b[2]==0x46) return 'image/gif'; if(b[0]==0x52&&b[1]==0x49&&b[2]==0x46&&b[3]==0x46&&b.length>11&&b[8]==0x57&&b[9]==0x45&&b[10]==0x42&&b[11]==0x50) return 'image/webp'; if(b[0]==0x50&&b[1]==0x4B&&b[2]==0x03&&b[3]==0x04) return 'application/zip'; if(b[0]==0x49&&b[1]==0x44&&b[2]==0x33||b[0]==0xFF&&b[1]==0xFB) return 'audio/mpeg'; if(b.length>11&&b[4]==0x66&&b[5]==0x74&&b[6]==0x79&&b[7]==0x70) return 'video/mp4'; for(let i=0;i<Math.min(1024,b.length);i++){let c=b[i]; if(c!==9&&c!==10&&c!==13&&(c<32||c>126)) return 'application/octet-stream';} return 'text/plain';}
+function mimeExt(m) { const map={'application/pdf':'.pdf','image/png':'.png','image/jpeg':'.jpg','image/gif':'.gif','image/webp':'.webp','application/zip':'.zip','audio/mpeg':'.mp3','video/mp4':'.mp4','text/plain':'.txt'}; return map[m]||'.bin';}
+function mimeLabel(m) { const map={'application/pdf':'PDF','image/png':'PNG Image','image/jpeg':'JPEG Image','image/gif':'GIF','image/webp':'WebP','application/zip':'ZIP / Office','audio/mpeg':'MP3 Audio','video/mp4':'MP4 Video','text/plain':'Plain Text','application/octet-stream':'Binary File'}; return map[m]||'Unknown';}
+function renderPreview(container, bytes, mime, titleEl){
+  container.innerHTML='';
+  const blob = new Blob([bytes], { type: mime });
+  const url = URL.createObjectURL(blob);
+  if(titleEl) titleEl.textContent = mimeLabel(mime) + ' · ' + fmtBytes(bytes.length);
+  if (mime==='application/pdf'){ const e=document.createElement('embed'); e.src=url+'#toolbar=0&navpanes=0'; e.type='application/pdf'; container.appendChild(e); }
+  else if (mime.startsWith('image/')){ const i=document.createElement('img'); i.src=url; container.appendChild(i); }
+  else if (mime.startsWith('video/')){ const v=document.createElement('video'); v.src=url; v.controls=true; container.appendChild(v); }
+  else if (mime.startsWith('audio/')){ const a=document.createElement('audio'); a.src=url; a.controls=true; container.appendChild(a); }
+  else if (mime==='text/plain'){ const txt=new TextDecoder().decode(bytes); const pre=document.createElement('pre'); pre.textContent=txt.length>6000?txt.slice(0,6000)+'\n\n… (truncated)':txt; container.appendChild(pre); }
+  else if (mime==='application/zip'){ container.innerHTML=`<div class="file-placeholder"><div class="icon">📦</div><div class="fname">ZIP / Office Document</div><div class="fsize">${fmtBytes(bytes.length)}</div><a class="action-pill" href="${url}" download="halogram_extracted.zip" style="margin-top:8px">⬇ Download to open</a></div>`; }
+  else { container.innerHTML=`<div class="file-placeholder"><div class="icon">📄</div><div class="fsize">${fmtBytes(bytes.length)} · ${mime}</div><a class="action-pill" href="${url}" download="halogram_extracted.bin" style="margin-top:8px">⬇ Download raw</a></div>`; }
+}
+function buildActions(container, bytes, mime){
+  container.innerHTML='';
+  if(mime!=='text/plain') return;
+  const txt=new TextDecoder().decode(bytes);
+  function pill(l,h,o){ const e=h?document.createElement('a'):document.createElement('button'); e.className='action-pill'; e.textContent=l; if(h){ e.href=h; e.target='_blank'; e.rel='noopener'; } if(o) e.addEventListener('click',o); container.appendChild(e); }
+  pill('📋 Copy all', null, (e)=>{ e.currentTarget.textContent='✓ Copied'; navigator.clipboard.writeText(txt).catch(()=>{}); setTimeout(()=>e.currentTarget&&(e.currentTarget.textContent='📋 Copy all'),2000); });
+  const urls=[...new Set(txt.match(/(https?:\/\/[^\s"'<>]+)/g)||[])];
+  urls.slice(0,3).forEach(u=>pill('🔗 '+u.slice(0,40),u));
+  const emails=[...new Set(txt.match(/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/g)||[])];
+  emails.slice(0,2).forEach(e=>pill('📧 '+e,'mailto:'+e));
+  const phones=[...new Set(txt.match(/\+?[\d][\d\s\-().]{7,20}[\d]/g)||[])];
+  const validPhones=phones.filter(p=>p.replace(/\D/g,'').length>=8);
+  validPhones.slice(0,2).forEach(p=>pill('📞 '+p.trim(),'tel:'+p.replace(/[^\d+]/g,'')));
+}
+
+// ======================= ENCODE (same as before) =======================
+let _carrier=null,_carrierCapBytes=0,_carrierImg=null,_encodedChunks=[],_payloadName='payload';
+const carrierInput=document.getElementById('carrierInput'); const carrierStatus=document.getElementById('carrierStatus'); const carrierPreview=document.getElementById('carrierPreview'); const capMeter=document.getElementById('capMeter'); const capText=document.getElementById('capText'); const capFill=document.getElementById('capFill'); const payloadStatus=document.getElementById('payloadStatus'); const encodeBtn=document.getElementById('encodeBtn'); const dlSingleBtn=document.getElementById('dlSingleBtn'); const dlZipBtn=document.getElementById('dlZipBtn'); const encodeStatus=document.getElementById('encodeStatus'); const encodeProgress=document.getElementById('encodeProgress'); const encodeFill=document.getElementById('encodeFill'); const chunkPreview=document.getElementById('chunkPreview'); const encodeChunkPills=document.getElementById('encodeChunkPills');
+carrierInput.addEventListener('change', e => { const file=e.target.files[0]; if(!file) return; _carrier=file; const url=URL.createObjectURL(file); const img=new Image(); img.onload=()=>{URL.revokeObjectURL(url);_carrierImg=img;_carrierCapBytes=imageCapacity(img);setStatus(carrierStatus,`${img.naturalWidth}×${img.naturalHeight}px · capacity ${fmtBytes(_carrierCapBytes)}`,'ok');capMeter.style.display='flex';capText.textContent=fmtBytes(_carrierCapBytes);capFill.style.width='100%';carrierPreview.innerHTML='';const pi=document.createElement('img');pi.src=URL.createObjectURL(file);pi.alt='Carrier';pi.onload=()=>URL.revokeObjectURL(pi.src);carrierPreview.appendChild(pi);}; img.onerror=()=>setStatus(carrierStatus,'Failed to load image','err'); img.src=url; });
+function setProgress(pct){encodeProgress.style.display='block';encodeFill.style.width=pct+'%';}
+encodeBtn.addEventListener('click', async () => {
+  if (!_carrier) { setStatus(encodeStatus, 'Load a carrier image first', 'err'); return; }
+  let rawBytes, payloadName; const isFile = radioFile.checked;
+  if (isFile) {
+    const fileIn = document.getElementById('secretFileInput'); if (!fileIn.files[0]) { setStatus(encodeStatus, 'Select a file to hide', 'err'); return; }
+    const f = fileIn.files[0]; if (f.size > 200 * 1024 * 1024) { setStatus(encodeStatus, `❌ File too large (${fmtBytes(f.size)}). Max 200 MB.`, 'err'); return; }
+    rawBytes = new Uint8Array(await f.arrayBuffer()); payloadName = f.name;
+  } else {
+    const textIn = document.getElementById('secretTextInput'); if (!textIn.value.trim()) { setStatus(encodeStatus, 'Enter text to hide', 'err'); return; }
+    rawBytes = new TextEncoder().encode(textIn.value); payloadName = 'hidden_text.txt';
+  }
+  _payloadName = payloadName;
+  encodeBtn.classList.add('working'); encodeBtn.disabled = true; dlSingleBtn.disabled = true; dlZipBtn.disabled = true; dlZipBtn.style.display='none'; encodeChunkPills.innerHTML=''; chunkPreview.innerHTML='<span>Encoding…</span>';
+  setStatus(encodeStatus, 'Compressing payload…'); setProgress(5);
+  let compressed = await compress(rawBytes); setProgress(15);
+  if (compressed.length <= _carrierCapBytes) {
+    try {
+      const blob = await encodeFileIntoCarrier(_carrier, compressed);
+      _encodedChunks = [blob]; setProgress(100); dlSingleBtn.disabled = false;
+      setStatus(encodeStatus, `✓ Encoded · ${fmtBytes(rawBytes.length)} → ${fmtBytes(compressed.length)} · single PNG` + (!_compressionSupported?' (no compression)':''), 'ok');
+      chunkPreview.innerHTML = ''; const pi=document.createElement('img'); pi.src=URL.createObjectURL(blob); pi.style.maxHeight='200px'; pi.onload=()=>URL.revokeObjectURL(pi.src); chunkPreview.appendChild(pi);
+      const pill=document.createElement('div'); pill.className='chunk-pill done'; pill.textContent='✓ 1/1'; encodeChunkPills.appendChild(pill);
+    } catch(err) { setStatus(encodeStatus, '✗ '+err.message, 'err'); }
+  } else {
+    const CHUNK_META=8, SAFETY=64; const chunkDataSize = _carrierCapBytes - CHUNK_META - SAFETY;
+    if (chunkDataSize <= 0) { setStatus(encodeStatus, 'Carrier image too small', 'err'); encodeBtn.classList.remove('working'); encodeBtn.disabled=false; return; }
+    const numChunks = Math.ceil(compressed.length / chunkDataSize);
+    setStatus(encodeStatus, `Splitting into ${numChunks} chunks…`);
+    _encodedChunks = [];
+    for (let i=0; i<numChunks; i++) {
+      const pill=document.createElement('div'); pill.className='chunk-pill load'; pill.textContent=`${i+1}/${numChunks}`; encodeChunkPills.appendChild(pill);
+      setStatus(encodeStatus, `Encoding chunk ${i+1}/${numChunks}…`); setProgress(15+85*(i/numChunks));
+      try {
+        const start=i*chunkDataSize, end=Math.min(start+chunkDataSize, compressed.length);
+        const slice = compressed.slice(start,end);
+        const meta=new Uint8Array(CHUNK_META); const dv=new DataView(meta.buffer); dv.setUint32(0,numChunks,false); dv.setUint32(4,i,false);
+        const full=new Uint8Array(CHUNK_META+slice.length); full.set(meta,0); full.set(slice,CHUNK_META);
+        const blob = await encodeFileIntoCarrier(_carrier, full);
+        _encodedChunks.push(blob);
+        pill.className='chunk-pill done'; pill.textContent=`✓ ${i+1}/${numChunks}`;
+        if (i===0) { chunkPreview.innerHTML=''; const pi=document.createElement('img'); pi.src=URL.createObjectURL(blob); pi.style.maxHeight='200px'; pi.onload=()=>URL.revokeObjectURL(pi.src); chunkPreview.appendChild(pi); }
+      } catch(err) { setStatus(encodeStatus, `✗ Chunk ${i+1}: ${err.message}`, 'err'); pill.className='chunk-pill error'; encodeBtn.classList.remove('working'); encodeBtn.disabled=false; return; }
+    }
+    setProgress(100); dlZipBtn.style.display='inline-flex'; dlZipBtn.disabled=false; dlSingleBtn.disabled=true;
+    setStatus(encodeStatus, `✓ Split into ${numChunks} PNGs · Download ZIP`, 'ok');
+  }
+  encodeBtn.classList.remove('working'); encodeBtn.disabled=false;
+});
+dlSingleBtn.addEventListener('click',()=>{ if(_encodedChunks[0]) triggerDL(_encodedChunks[0], 'halogram_'+sanitizeName(_payloadName.replace(/\.[^.]+$/,''))+'.png'); });
+dlZipBtn.addEventListener('click', async () => {
+  if (!_encodedChunks.length) return;
+  const zip = new JSZip();
+  for (let i=0; i<_encodedChunks.length; i++) zip.file(`halogram_${i+1}.png`, await _encodedChunks[i].arrayBuffer());
+  zip.file('manifest.json', JSON.stringify({filename:_payloadName, chunks:_encodedChunks.length}, null, 2));
+  zip.file('README.txt', `Halogram Pro Chunks\nExtracted from: ${_payloadName}\n\nTo reconstruct:\n1. Select ALL halogram_*.png files in "Multi-Chunk Reconstruct".\n2. Click Reconstruct.\n3. Download the restored file.\nDo not rename the PNG files.`);
+  const blob = await zip.generateAsync({type:'blob', compression:'DEFLATE'});
+  triggerDL(blob, `halogram_${sanitizeName(_payloadName.split('.')[0])}.zip`);
+});
+
+// ======================= DECODE (Halogram + QR fallback) =======================
+let _decBytes=null,_decMime=null,_decName='halogram_extracted';
+const resultPanel=document.getElementById('resultPanel'); const resultPlaceholder=document.getElementById('resultPlaceholder'); const resultPreview=document.getElementById('resultPreview'); const resultPreviewTitle=document.getElementById('resultPreviewTitle'); const resultBadge=document.getElementById('resultBadge'); const resultActions=document.getElementById('resultActions'); const dlResultBtn=document.getElementById('dlResultBtn');
+function showResult(bytes, name){ _decBytes=bytes; _decMime=detectMime(bytes); _decName=name||'halogram_extracted'; resultPlaceholder.style.display='none'; resultPanel.style.display='block'; resultBadge.textContent=mimeLabel(_decMime)+' · '+fmtBytes(bytes.length); renderPreview(resultPreview,bytes,_decMime,resultPreviewTitle); buildActions(resultActions,bytes,_decMime); dlResultBtn.disabled=false; }
+function resetDecodeUI() { resultPanel.style.display='none'; resultPlaceholder.style.display='block'; resultPreview.innerHTML=''; resultActions.innerHTML=''; dlResultBtn.disabled=true; _decBytes=null; }
+// Universal decoder: tries Halogram, then falls back to QR
+async function universalDecode(file, isMultiChunk = false) {
+  if (isMultiChunk) {
+    // Multi-chunk only works for Halogram splits
+    throw new Error('Multi-chunk reconstruction is only for Halogram files.');
+  }
+  try {
+    // Try Halogram first
+    const raw = await decodeHalogram(file);
+    let bytes;
+    try { bytes = await decompress(raw); } catch { bytes = raw; }
+    return { bytes, method: 'Halogram' };
+  } catch(halogramErr) {
+    // Try QR decoding
+    try {
+      const qrText = await decodeQRCode(file);
+      const bytes = new TextEncoder().encode(qrText);
+      return { bytes, method: 'QR code' };
+    } catch(qrErr) {
+      throw new Error(`Not a Halogram image nor a valid QR code. Halogram error: ${halogramErr.message}. QR error: ${qrErr.message}`);
+    }
+  }
+}
+document.getElementById('singleDecodeBtn').addEventListener('click', async () => {
+  const file=document.getElementById('singleDecodeInput').files[0]; if(!file){ setStatus(document.getElementById('singleStatus'),'Select an image first','err'); return; }
+  resetDecodeUI(); const st=document.getElementById('singleStatus'); setStatus(st,'Decoding…');
+  try {
+    const { bytes, method } = await universalDecode(file, false);
+    showResult(bytes, file.name.replace(/\.[^.]+$/, '_extracted'));
+    setStatus(st,`✓ Extracted ${fmtBytes(bytes.length)} via ${method}`,'ok');
+  } catch(err){ setStatus(st,'✗ '+err.message,'err'); }
+});
+document.getElementById('multiDecodeBtn').addEventListener('click', async () => {
+  const files=Array.from(document.getElementById('multiDecodeInput').files); if(!files.length){ setStatus(document.getElementById('multiStatus'),'Select chunk PNG files','err'); return; }
+  resetDecodeUI(); const st=document.getElementById('multiStatus'); const chunkPills=document.getElementById('chunkPills'); const decodeProgress=document.getElementById('decodeProgress'); const decodeFill=document.getElementById('decodeFill');
+  chunkPills.innerHTML=''; decodeProgress.style.display='block'; decodeFill.style.width='0%';
+  files.sort((a,b)=>{ const na=parseInt((a.name.match(/(\d+)/)||['0'])[0],10); const nb=parseInt((b.name.match(/(\d+)/)||['0'])[0],10); return na-nb; });
+  const pills=files.map((f,i)=>{ const p=document.createElement('div'); p.className='chunk-pill'; p.textContent=`#${i+1}`; chunkPills.appendChild(p); return p; });
+  setStatus(st,`Reading ${files.length} chunk(s)…`);
+  const chunks=[]; let totalChunks=null;
+  for(let i=0;i<files.length;i++){
+    pills[i].className='chunk-pill load'; pills[i].textContent=`⏳ #${i+1}`;
+    try{
+      const payload=await decodeHalogram(files[i]); if(payload.length<8) throw new Error('Invalid chunk');
+      const dv=new DataView(payload.buffer,payload.byteOffset); const nc=dv.getUint32(0,false); const idx=dv.getUint32(4,false);
+      if(nc<1||nc>10000) throw new Error(`Invalid total chunks: ${nc}`);
+      if(idx>=nc) throw new Error(`Chunk index ${idx} out of range ${nc}`);
+      if(totalChunks===null) totalChunks=nc; else if(totalChunks!==nc) throw new Error(`Inconsistent chunk count`);
+      chunks[idx]=payload.slice(8);
+      pills[i].className='chunk-pill done'; pills[i].textContent=`✓ #${idx+1}`; setStatus(st,`Read chunk ${idx+1}/${nc}`);
+      decodeFill.style.width=(100*(i+1)/files.length)+'%';
+    } catch(err){ pills[i].className='chunk-pill error'; pills[i].textContent=`✗ #${i+1}`; setStatus(st,`✗ ${files[i].name}: ${err.message}`,'err'); return; }
+  }
+  for(let i=0;i<(totalChunks||0);i++){ if(!chunks[i]){ setStatus(st,`✗ Missing chunk ${i+1}`,'err'); return; } }
+  const totalLen=chunks.reduce((s,c)=>s+c.length,0); const merged=new Uint8Array(totalLen); let offset=0; for(const c of chunks){ merged.set(c,offset); offset+=c.length; }
+  setStatus(st,'Decompressing…'); let bytes; try{ bytes=await decompress(merged); } catch{ bytes=merged; }
+  showResult(bytes, `reconstructed_${Date.now()}`); setStatus(st,`✓ Reconstructed ${fmtBytes(bytes.length)} from ${chunks.length} chunks`,'ok');
+});
+dlResultBtn.addEventListener('click',()=>{ if(_decBytes) triggerDL(new Blob([_decBytes],{type:_decMime}), _decName+mimeExt(_decMime)); });
+
+// ======================= CAMERA (supports both Halogram & QR) =======================
+let _camStream=null,_camBytes=null,_camMime=null;
+const liveVideo=document.getElementById('liveVideo'); const camStatus=document.getElementById('camStatus'); const camResultPanel=document.getElementById('camResultPanel'); const camPlaceholder=document.getElementById('camPlaceholder'); const camPreview=document.getElementById('camPreview'); const camPreviewTitle=document.getElementById('camPreviewTitle'); const camActions=document.getElementById('camActions'); const camDlBtn=document.getElementById('camDlBtn');
+document.getElementById('startCamBtn').addEventListener('click', async () => { if(_camStream)_camStream.getTracks().forEach(t=>t.stop()); try{ _camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080}}}); liveVideo.srcObject=_camStream; await liveVideo.play(); setStatus(camStatus,'✓ Camera active','ok'); } catch(err){ setStatus(camStatus,'✗ Camera error: '+err.message,'err'); } });
+document.getElementById('captureBtn').addEventListener('click', () => { if(!liveVideo.videoWidth){ setStatus(camStatus,'Start the camera first','err'); return; } const c=document.createElement('canvas'); c.width=liveVideo.videoWidth; c.height=liveVideo.videoHeight; c.getContext('2d').drawImage(liveVideo,0,0); setStatus(camStatus,'Decoding…'); c.toBlob(async blob=>{ try{ const { bytes, method } = await universalDecode(blob, false); _camBytes=bytes; _camMime=detectMime(bytes); camPlaceholder.style.display='none'; camResultPanel.style.display='block'; renderPreview(camPreview,bytes,_camMime,camPreviewTitle); buildActions(camActions,bytes,_camMime); camDlBtn.disabled=false; setStatus(camStatus,`✓ Decoded ${fmtBytes(bytes.length)} via ${method}`,'ok'); } catch(err){ setStatus(camStatus,'✗ '+err.message,'err'); } },'image/png'); });
+camDlBtn.addEventListener('click',()=>{ if(_camBytes) triggerDL(new Blob([_camBytes],{type:_camMime}), 'camera_decoded'+mimeExt(_camMime)); });
+
+// ======================= QR BONUS (unchanged) =======================
+let _qrCanvas=null;
+function generateQRMatrix(text,size,fg,bg,style){
+  const canvas=document.createElement('canvas'); canvas.width=size; canvas.height=size; const ctx=canvas.getContext('2d');
+  if(typeof qrcode==='undefined'){ ctx.fillStyle=bg; ctx.fillRect(0,0,size,size); ctx.fillStyle=fg; ctx.font='14px monospace'; ctx.fillText('QR lib error',20,size/2); return canvas; }
+  const qr=qrcode(0,'M'); qr.addData(text); qr.make(); const modules=qr.getModuleCount(); const cellSize=size/(modules+2);
+  ctx.fillStyle=bg; ctx.fillRect(0,0,size,size); ctx.fillStyle=fg;
+  for(let row=0;row<modules;row++) for(let col=0;col<modules;col++) if(qr.isDark(row,col)){
+    if(style==='rounded'){
+      const isFinder = (row<7 && col<7) || (row<7 && col>modules-8) || (row>modules-8 && col<7);
+      if(isFinder) ctx.fillRect((col+1)*cellSize,(row+1)*cellSize,cellSize,cellSize);
+      else { const x=(col+1)*cellSize, y=(row+1)*cellSize, r=cellSize*0.4; ctx.beginPath(); ctx.arc(x+cellSize/2,y+cellSize/2,r,0,Math.PI*2); ctx.fill(); }
+    } else ctx.fillRect((col+1)*cellSize,(row+1)*cellSize,cellSize,cellSize);
+  }
+  if(style==='invert'){ const id=ctx.getImageData(0,0,size,size); for(let i=0;i<id.data.length;i+=4){ id.data[i]=255-id.data[i]; id.data[i+1]=255-id.data[i+1]; id.data[i+2]=255-id.data[i+2]; } ctx.putImageData(id,0,0); }
+  else if(style==='ghost'){ const id=ctx.getImageData(0,0,size,size); for(let i=0;i<id.data.length;i+=4){ if(id.data[i]<128){ id.data[i]=80; id.data[i+1]=80; id.data[i+2]=100; id.data[i+3]=180; } else id.data[i+3]=0; } ctx.fillStyle=bg; ctx.fillRect(0,0,size,size); ctx.putImageData(id,0,0); }
+  return canvas;
+}
+document.getElementById('genQrBtn').addEventListener('click',()=>{ const content=document.getElementById('qrContent').value.trim(); if(!content){ setStatus(document.getElementById('qrStatus'),'Enter QR content first','err'); return; } const style=document.getElementById('qrStyle').value; const fg=document.getElementById('qrFg').value; const bg=document.getElementById('qrBg').value; try{ const canvas=generateQRMatrix(content,400,fg,bg,style); _qrCanvas=canvas; const previewDiv=document.getElementById('qrPreview'); previewDiv.innerHTML=''; previewDiv.appendChild(canvas); document.getElementById('dlQrBtn').disabled=false; setStatus(document.getElementById('qrStatus'),'✓ QR generated — scannable by Google Lens','ok'); } catch(err){ setStatus(document.getElementById('qrStatus'),'✗ QR error: '+err.message,'err'); } });
+document.getElementById('dlQrBtn').addEventListener('click',()=>{ if(_qrCanvas) _qrCanvas.toBlob(blob=>triggerDL(blob,'halogram_qr.png')); });
+</script>
+</body>
+</html>
